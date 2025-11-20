@@ -7,13 +7,14 @@ import time
 import logging
 import re
 from datetime import datetime, timedelta
+from datetime import date
 
 from multiprocessing import Process
-
 import psycopg2
 import redis
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 import threading
+import requests
 import time as _time
 from faker import Faker
 from confluent_kafka import SerializingProducer
@@ -42,8 +43,46 @@ PG_CONN = {
     "port": 5432,
     "user": "airflow",
     "password": "airflow",
-    "dbname": "airflow",
+    "dbname": "data_source",
 }
+
+CURRENT_RATES_DATE = None
+CURRENT_RATES = {
+    'USD': 1.0,
+    'EUR': 0.9512,
+    'GBP': 0.8234,
+    'CAD': 1.3871,
+    'AUD': 1.5345
+}
+
+def update_exchange_rates():
+    global CURRENT_RATES_DATE, CURRENT_RATES
+    today = date.today()
+    
+    # لو النهاردة محدثين خلاص متعملش حاجة
+    if CURRENT_RATES_DATE == today:
+        return
+    
+    logger.info("تحديث أسعار الصرف لليوم %s ...", today)
+    try:
+        resp = requests.get("https://api.exchangerate.host/latest?base=USD", timeout=8)
+        data = resp.json()
+        if data.get('success'):
+            r = data['rates']
+            CURRENT_RATES = {
+                'USD': 1.0,
+                'EUR': r.get('EUR', 0.95),
+                'GBP': r.get('GBP', 0.82),
+                'CAD': r.get('CAD', 1.38),
+                'AUD': r.get('AUD', 1.53)
+            }
+            CURRENT_RATES_DATE = today
+            logger.info("تم تحديث أسعار الصرف → EUR=%.4f | GBP=%.4f | CAD=%.4f | AUD=%.4f",
+                        CURRENT_RATES['EUR'], CURRENT_RATES['GBP'], CURRENT_RATES['CAD'], CURRENT_RATES['AUD'])
+        else:
+            logger.warning("API رجع فشل، هنستخدم آخر قيم")
+    except Exception as e:
+        logger.error("فشل جلب سعر الصرف: %s", e)
 
 # Fallback local order counter when Redis is unavailable
 _local_order_counter = 0
@@ -198,7 +237,7 @@ def generate_new_customer(country: Country) -> int:
 
     cur.execute(
         """
-        INSERT INTO customers 
+        INSERT INTO generated_customers 
         (gender, name, city, state_code, state, zip_code, country, continent, birthday)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING customerkey
@@ -244,6 +283,7 @@ def generate_order_serial(prefix: str, order_number: int, line_item: int) -> str
 # ==================== WORKER ====================
 def worker(wid: int):
     logger.info("Worker %d started (PID %d)", wid, os.getpid())
+    update_exchange_rates()
 
     # Each worker has its own copy of products
     products = load_products()
@@ -267,6 +307,7 @@ def worker(wid: int):
             logger.debug("Message delivered to %s [%s] at offset %s", msg.topic(), msg.partition(), msg.offset())
 
     while True:
+        update_exchange_rates()
         # Choose a random country (weighted)
         country = random.choices(list(COUNTRY_WEIGHTS.keys()), weights=list(COUNTRY_WEIGHTS.values()), k=1)[0]
 
@@ -301,6 +342,10 @@ def worker(wid: int):
                 k=1
             )[0]
             
+            line_total_usd = round(qty * price, 2)
+            exchange_rate = CURRENT_RATES.get(currency, 1.0)
+            line_total_local = round(line_total_usd * exchange_rate, 2)
+            
             event = {
                 "event_type": "ORDER",
                 "order_number": order_number,
@@ -310,12 +355,14 @@ def worker(wid: int):
                 "delivery_date": None,
                 "customerkey": customerkey,
                 "storekey": storekey,
-                "productkey": pk,
+                "productkey": int(pk),             
                 "quantity": qty,
                 "payment_method": payment_method,
                 "currency_code": currency,
                 "status": "Completed",
                 "order_group_id": group_id,
+                "unit_price_usd": round(float(price), 2),  
+                "line_total_amount": line_total_local,                    
                 "event_timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
             }
             events.append(event)
@@ -330,8 +377,8 @@ def worker(wid: int):
                     "event_type": "CANCEL",
                     "order_serial": generate_order_serial("C", order_number, ev["line_item"]),
                     "order_date": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
-                    "status": "Cancelled",
-                    "order_date": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+                    "status": "Cancelled",     
+                    "event_timestamp": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),               
                 })
                 producer.produce(topic=KAFKA_TOPIC, key=ev["order_serial"], value=ev, on_delivery=delivery_report)
 
