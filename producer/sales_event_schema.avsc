@@ -1,0 +1,58 @@
+{
+  "namespace": "com.commerce.sales.v1",
+  "type": "record",
+  "name": "SalesEvent",  
+  "fields": [
+    {
+      "name": "event_type",
+      "type": {
+        "type": "enum",
+        "name": "EventType",
+        "symbols": ["ORDER", "CANCEL", "RETURN"]
+      }
+    },
+    {"name": "order_number",      "type": "long"},
+    {"name": "line_item",         "type": "int"},
+    {"name": "order_serial",      "type": "string"},
+    {
+      "name": "order_date",        
+      "type": "string",
+      "logicalType": "timestamp-millis",
+      "doc": "Format: dd-MM-yyyy HH:mm:ss"
+    },    
+    {
+      "name": "delivery_date",
+      "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}],
+      "default": null
+    },
+    {"name": "customerkey",       "type": "long"},
+    {"name": "storekey",          "type": "long"},
+    {"name": "productkey",        "type": "long"},
+    {"name": "quantity",          "type": "int"},
+    {
+      "name": "currency_code",
+      "type": {
+        "type": "enum",
+        "name": "CurrencyCode",
+        "symbols": ["USD", "CAD", "GBP", "AUD", "EUR"]
+      }
+    },
+    {
+      "name": "payment_method",
+      "type": {
+        "type": "enum",
+        "name": "PaymentMethod",
+        "symbols": ["CASH", "WALLET", "DEBIT_CARD", "CREDIT_CARD"]
+      },
+      "default": "CASH",
+      "doc": "Payment method used for the order"
+    },    
+    {"name": "status",            "type": "string"},
+    {"name": "order_group_id",    "type": "string"},
+    {
+      "name": "event_timestamp",   "type": "string",
+      "logicalType": "timestamp-millis",
+      "doc": "Format: dd-MM-yyyy HH:mm:ss"
+    }
+  ]
+}
