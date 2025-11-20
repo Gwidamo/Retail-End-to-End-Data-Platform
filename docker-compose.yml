@@ -489,8 +489,6 @@ services:
   #     context: ./spark
   #     dockerfile: Dockerfile-Spark
   #   command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
-  #   depends_on:
-  #     - minio
   #   healthcheck:
   #     <<: *healthcheck-common
   #     test: ['CMD', 'curl', '-f', 'http://localhost:8080']
@@ -501,8 +499,6 @@ services:
   #   ports:
   #     - "8182:8080"
   #   restart: always
-  #   volumes:
-  #     - ./airflow/dags:/opt/airflow/dags
   
   # spark-worker:
   #   build:
@@ -511,12 +507,9 @@ services:
   #   command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
   #   depends_on:
   #     - spark-master
-  #   env_file:
-  #     - ./env/minio.env
-  #     - ./env/minio.creds
   #   environment:
-  #     SPARK_WORKER_CORES: 2
-  #     SPARK_WORKER_MEMORY: 1g
+  #     SPARK_WORKER_CORES: 3
+  #     SPARK_WORKER_MEMORY: 2g
   #   healthcheck:
   #     <<: *healthcheck-common
   #     test: ['CMD', 'curl', '-f', 'http://localhost:8081']
@@ -527,8 +520,6 @@ services:
   #   ports:
   #     - "8183:8081"
   #   restart: always
-  #   volumes:
-  #     - ./airflow/dags:/opt/airflow/dags
 
 networks:
   lp:
