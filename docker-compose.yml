@@ -1,10 +1,8 @@
-x-airflow-common:
-  &airflow-common
+x-airflow-common: &airflow-common
   build:
-      context: ./airflow
-      dockerfile: Dockerfile-Airflow
-  depends_on:
-    &airflow-common-depends-on
+    context: ./airflow
+    dockerfile: Dockerfile-Airflow
+  depends_on: &airflow-common-depends-on
     postgres:
       condition: service_healthy
     redis:
@@ -14,8 +12,7 @@ x-airflow-common:
     # - ./env/minio.env
     # - ./env/minio.creds
     - ./env/spark.env
-  environment:
-    &airflow-common-env
+  environment: &airflow-common-env
     AIRFLOW__API__SECRET_KEY: ${AIRFLOW__API__SECRET_KEY}
     AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
@@ -34,7 +31,7 @@ x-airflow-common:
     DASHBOARD_API_URL: http://dashboard-api:8080/report
   image: lp/airflow
   networks:
-      - lp
+    - lp
   user: "${AIRFLOW_UID}:50000"
   volumes:
     - ./airflow/config:/opt/airflow/config
@@ -42,12 +39,11 @@ x-airflow-common:
     - ./airflow/logs:/opt/airflow/logs
 
 x-healthcheck:
-  healthcheck:
-    &healthcheck-common
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+  healthcheck: &healthcheck-common
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
 
 services:   
 
@@ -403,7 +399,27 @@ services:
       retries: 5  
     networks:
       - lp  
-
+  cassandra:
+    image: cassandra:4.0
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=SalesCluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - lp
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -u cassandra -p cassandra -e 'describe keyspaces'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: always  
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
@@ -425,42 +441,63 @@ services:
 # Spark Services
 ################################ 
 
-# spark-master:
-  #   build:
-  #     context: ./spark
-  #     dockerfile: Dockerfile-Spark
-  #   command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
-  #   healthcheck:
-  #     <<: *healthcheck-common
-  #     test: ['CMD', 'curl', '-f', 'http://localhost:8080']
-  #   hostname: spark-master
-  #   image: lp/spark
-  #   networks:
-  #     - lp
-  #   ports:
-  #     - "8182:8080"
-  #   restart: always
-  
-  # spark-worker:
-  #   build:
-  #     context: ./spark
-  #     dockerfile: Dockerfile-Spark
-  #   command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
-  #   depends_on:
-  #     - spark-master
-  #   environment:
-  #     SPARK_WORKER_CORES: 3
-  #     SPARK_WORKER_MEMORY: 2g
-  #   healthcheck:
-  #     <<: *healthcheck-common
-  #     test: ['CMD', 'curl', '-f', 'http://localhost:8081']
-  #   hostname: spark-worker
-  #   image: lp/spark
-  #   networks:
-  #     - lp
-  #   ports:
-  #     - "8183:8081"
-  #   restart: always
+  spark-notebook:
+    image: quay.io/jupyter/all-spark-notebook:spark-3.5.3
+    container_name: spark-notebook
+    restart: always
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    volumes:
+      - ./:/home/jovyan/work
+    environment:
+      - JUPYTER_TOKEN=easy
+    user: root
+    networks:
+      - lp
+
+  # ==========================================
+  # STORAGE & VISUALIZATION LAYERS
+  # ==========================================      
+    
+  sink-service:
+    build:
+      context: ./cassandra
+      dockerfile: Dockerfile-Sink
+    container_name: sink-service
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+    networks:
+      - lp
+    restart: always  
+
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=hadesarchitect-cassandra-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - lp
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always    
 
 networks:
   lp:
@@ -472,3 +509,6 @@ volumes:
   redis_data:
   pgadmin_data:
   nifi_conf:
+  spark_data:
+  cassandra_data:
+  grafana_data:
