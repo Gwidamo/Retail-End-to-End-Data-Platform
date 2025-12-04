@@ -4,5 +4,4 @@ __pycache__/
 .env
 env/
 .ipynb_checkpoints
-airflow/
 checkpoints/
