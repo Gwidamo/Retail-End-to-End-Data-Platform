@@ -243,11 +243,16 @@ services:
       # Plugin path
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components      
       
-      # Performance & Reliability
+      # Performance & Reliability && Dead Letter Queue Configs
       CONNECT_TASK_SHUTDOWN_GRACEFUL_TIMEOUT_MS: 30000
       CONNECT_ERRORS_TOLERANCE: all
       CONNECT_ERRORS_LOG_ENABLE: "true"
       CONNECT_ERRORS_LOG_INCLUDE_MESSAGES: "true"
+
+      CONNECT_ERRORS_DEADLETTERQUEUE_TOPIC_NAME: dlq-sales-events
+      CONNECT_ERRORS_DEADLETTERQUEUE_TOPIC_REPLICATION_FACTOR: 1
+      CONNECT_ERRORS_DEADLETTERQUEUE_CONTEXT_HEADERS_ENABLE: "true"
+
       # AWS credentials (set these in env/all.env or your environment)
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -569,3 +574,4 @@ volumes:
   spark_data:
   cassandra_data:
   grafana_data:
+  airflow-data:
