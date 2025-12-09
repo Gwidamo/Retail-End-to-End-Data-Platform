@@ -56,7 +56,7 @@ Data Sources (PostgreSQL, CSV)
 │ • Snowflake DW (Medallion)      │ • Kafka Connect (S3 Sink)        │
 │ • dbt Transformations           │ • Apache Spark Streaming         │
 │ • Fact & Dimension Tables       │ • Cassandra DB (Time-series)     │
-└──────────────────────────────────┴──────────────────────────────────┘
+└─────────────────────────────────┴──────────────────────────────────┘
     ↓                                   ↓
 SERVING LAYER: Snowflake | Cassandra
     ↓
